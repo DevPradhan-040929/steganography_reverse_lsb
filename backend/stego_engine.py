@@ -1,39 +1,72 @@
 from PIL import Image
-import numpy as np
 
-END_MARKER = '1111111111111110'
 
 def text_to_binary(text):
-    return ''.join(format(ord(c), '08b') for c in text) + END_MARKER
+    return ''.join(format(ord(i), '08b') for i in text)
+
 
 def binary_to_text(binary):
     chars = [binary[i:i+8] for i in range(0, len(binary), 8)]
-    message = ''
-    for char in chars:
-        if char == '11111111':
-            break
-        message += chr(int(char, 2))
+    message = ''.join(chr(int(c, 2)) for c in chars)
     return message
 
-def hide_message(image, secret_text):
-    image = image.convert("RGB")
-    data = np.array(image)
-    flat = data.flatten()
 
-    binary_secret = text_to_binary(secret_text)
+def hide_message(image, secret_message):
 
-    if len(binary_secret) > len(flat):
-        raise ValueError("Message too large for image")
+    
+    secret_message += "#####"
 
-    for i, bit in enumerate(binary_secret):
-        flat[i] = (flat[i] & ~1) | int(bit)
+    binary_secret = text_to_binary(secret_message)
 
-    stego_data = flat.reshape(data.shape)
-    return Image.fromarray(stego_data)
+    img = image.convert("RGB")
+    pixels = list(img.getdata())
+
+    new_pixels = []
+    data_index = 0
+
+    for pixel in pixels:
+        r, g, b = pixel
+
+        if data_index < len(binary_secret):
+            r = (r & ~1) | int(binary_secret[data_index])
+            data_index += 1
+
+        if data_index < len(binary_secret):
+            g = (g & ~1) | int(binary_secret[data_index])
+            data_index += 1
+
+        if data_index < len(binary_secret):
+            b = (b & ~1) | int(binary_secret[data_index])
+            data_index += 1
+
+        new_pixels.append((r, g, b))
+
+    img.putdata(new_pixels)
+    return img
+
 
 def extract_message(image):
-    data = np.array(image).flatten()
-    binary = ''.join(str(pixel & 1) for pixel in data)
 
-    end = binary.find(END_MARKER)
-    return binary_to_text(binary[:end])
+    img = image.convert("RGB")
+    pixels = list(img.getdata())
+
+    binary_data = ""
+
+    for pixel in pixels:
+        r, g, b = pixel
+
+        binary_data += str(r & 1)
+        binary_data += str(g & 1)
+        binary_data += str(b & 1)
+
+    all_bytes = [binary_data[i:i+8] for i in range(0, len(binary_data), 8)]
+
+    decoded_message = ""
+
+    for byte in all_bytes:
+        decoded_message += chr(int(byte, 2))
+
+        if decoded_message.endswith("#####"):
+            return decoded_message[:-5]
+
+    return "No hidden message found"
